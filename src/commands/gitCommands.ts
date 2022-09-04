@@ -2,7 +2,7 @@ import type { Disposable, InputBox, QuickInputButton, QuickPick, QuickPickItem }
 import { QuickInputButtons, window } from 'vscode';
 import { configuration } from '../configuration';
 import { Commands } from '../constants';
-import { Container } from '../container';
+import type { Container } from '../container';
 import type { KeyMapping } from '../keyboard';
 import { Directive, DirectiveQuickPickItem } from '../quickpicks/items/directive';
 import { command } from '../system/command';
