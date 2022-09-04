@@ -39,8 +39,8 @@ export class WorktreesNode extends ViewNode<WorktreesView | RepositoriesView> {
 
 	async getChildren(): Promise<ViewNode[]> {
 		if (this._children == null) {
-			const access = await this.repo.access(PlusFeatures.Worktrees);
-			if (!access.allowed) return [];
+			// const access = await this.repo.access(PlusFeatures.Worktrees);
+			// if (!access.allowed) return [];
 
 			const worktrees = await this.repo.getWorktrees();
 			if (worktrees.length === 0) return [new MessageNode(this.view, this, 'No worktrees could be found.')];
@@ -52,7 +52,8 @@ export class WorktreesNode extends ViewNode<WorktreesView | RepositoriesView> {
 	}
 
 	async getTreeItem(): Promise<TreeItem> {
-		const access = await this.repo.access(PlusFeatures.Worktrees);
+		await this.repo.access(PlusFeatures.Worktrees);
+		const access = { allowed: true };
 
 		const item = new TreeItem(
 			'Worktrees',

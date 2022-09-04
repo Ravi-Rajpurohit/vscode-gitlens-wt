@@ -551,89 +551,89 @@ export class GitProviderService implements Disposable {
 	@debug()
 	private async accessCore(feature?: PlusFeatures, repoPath?: string | Uri): Promise<FeatureAccess> {
 		const subscription = await this.getSubscription();
-		if (subscription.account?.verified === false) {
-			return { allowed: false, subscription: { current: subscription } };
-		}
+		// if (subscription.account?.verified === false) {
+		// 	return { allowed: false, subscription: { current: subscription } };
+		// }
 
-		const plan = subscription.plan.effective.id;
-		if (isSubscriptionPaidPlan(plan) || GitProviderService.previewFeatures?.get(feature)) {
-			return { allowed: true, subscription: { current: subscription } };
-		}
+		// const plan = subscription.plan.effective.id;
+		// if (isSubscriptionPaidPlan(plan) || GitProviderService.previewFeatures?.get(feature)) {
+		return { allowed: true, subscription: { current: subscription } };
+		// }
 
-		function getRepoAccess(
-			this: GitProviderService,
-			repoPath: string | Uri,
-			plan: FreeSubscriptionPlans,
-		): Promise<FeatureAccess> {
-			const { path: cacheKey } = this.getProvider(repoPath);
+		// function getRepoAccess(
+		// 	this: GitProviderService,
+		// 	repoPath: string | Uri,
+		// 	plan: FreeSubscriptionPlans,
+		// ): Promise<FeatureAccess> {
+		// 	const { path: cacheKey } = this.getProvider(repoPath);
 
-			let access = this._accessCache.get(cacheKey);
-			if (access == null) {
-				access = this.visibility(repoPath).then(visibility => {
-					if (visibility !== RepositoryVisibility.Private) {
-						switch (plan) {
-							case SubscriptionPlanId.Free:
-								return {
-									allowed: false,
-									subscription: { current: subscription, required: SubscriptionPlanId.FreePlus },
-								};
-							case SubscriptionPlanId.FreePlus:
-								return { allowed: true, subscription: { current: subscription } };
-						}
-					}
+		// 	let access = this._accessCache.get(cacheKey);
+		// 	if (access == null) {
+		// 		access = this.visibility(repoPath).then(visibility => {
+		// 			if (visibility !== RepositoryVisibility.Private) {
+		// 				switch (plan) {
+		// 					case SubscriptionPlanId.Free:
+		// 						return {
+		// 							allowed: false,
+		// 							subscription: { current: subscription, required: SubscriptionPlanId.FreePlus },
+		// 						};
+		// 					case SubscriptionPlanId.FreePlus:
+		// 						return { allowed: true, subscription: { current: subscription } };
+		// 				}
+		// 			}
 
-					return {
-						allowed: false,
-						subscription: { current: subscription, required: SubscriptionPlanId.Pro },
-					};
-				});
+		// 			return {
+		// 				allowed: false,
+		// 				subscription: { current: subscription, required: SubscriptionPlanId.Pro },
+		// 			};
+		// 		});
 
-				this._accessCache.set(cacheKey, access);
-			}
+		// 		this._accessCache.set(cacheKey, access);
+		// 	}
 
-			return access;
-		}
+		// 	return access;
+		// }
 
-		if (repoPath == null) {
-			const repositories = this.openRepositories;
-			if (repositories.length === 0) {
-				return { allowed: false, subscription: { current: subscription } };
-			}
+		// if (repoPath == null) {
+		// 	const repositories = this.openRepositories;
+		// 	if (repositories.length === 0) {
+		// 		return { allowed: false, subscription: { current: subscription } };
+		// 	}
 
-			if (repositories.length === 1) {
-				return getRepoAccess.call(this, repositories[0].path, plan);
-			}
+		// 	if (repositories.length === 1) {
+		// 		return getRepoAccess.call(this, repositories[0].path, plan);
+		// 	}
 
-			let allowed = true;
-			let requiredPlan: RequiredSubscriptionPlans | undefined;
-			let requiredPriority = -1;
+		// 	let allowed = true;
+		// 	let requiredPlan: RequiredSubscriptionPlans | undefined;
+		// 	let requiredPriority = -1;
 
-			const maxPriority = getSubscriptionPlanPriority(SubscriptionPlanId.Pro);
+		// 	const maxPriority = getSubscriptionPlanPriority(SubscriptionPlanId.Pro);
 
-			for await (const result of fastestSettled(repositories.map(r => getRepoAccess.call(this, r.path, plan)))) {
-				if (result.status !== 'fulfilled' || result.value.allowed) continue;
+		// 	for await (const result of fastestSettled(repositories.map(r => getRepoAccess.call(this, r.path, plan)))) {
+		// 		if (result.status !== 'fulfilled' || result.value.allowed) continue;
 
-				allowed = false;
-				const priority = getSubscriptionPlanPriority(result.value.subscription.required);
-				if (requiredPriority < priority) {
-					requiredPriority = priority;
-					requiredPlan = result.value.subscription.required;
-				}
+		// 		allowed = false;
+		// 		const priority = getSubscriptionPlanPriority(result.value.subscription.required);
+		// 		if (requiredPriority < priority) {
+		// 			requiredPriority = priority;
+		// 			requiredPlan = result.value.subscription.required;
+		// 		}
 
-				if (requiredPriority >= maxPriority) break;
-			}
+		// 		if (requiredPriority >= maxPriority) break;
+		// 	}
 
-			return allowed
-				? { allowed: true, subscription: { current: subscription } }
-				: { allowed: false, subscription: { current: subscription, required: requiredPlan } };
-		}
+		// 	return allowed
+		// 		? { allowed: true, subscription: { current: subscription } }
+		// 		: { allowed: false, subscription: { current: subscription, required: requiredPlan } };
+		// }
 
-		return getRepoAccess.call(this, repoPath, plan);
+		// return getRepoAccess.call(this, repoPath, plan);
 	}
 
 	async ensureAccess(feature: PlusFeatures, repoPath?: string): Promise<void> {
-		const { allowed, subscription } = await this.access(feature, repoPath);
-		if (!allowed) throw new AccessDeniedError(subscription.current, subscription.required);
+		// const { allowed, subscription } = await this.access(feature, repoPath);
+		// if (!allowed) throw new AccessDeniedError(subscription.current, subscription.required);
 	}
 
 	supports(repoPath: string | Uri, feature: Features): Promise<boolean> {

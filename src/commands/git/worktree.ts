@@ -200,8 +200,8 @@ export class WorktreeGitCommand extends QuickCommand<State> {
 				}
 			}
 
-			const result = yield* ensureAccessStep(state as any, context, PlusFeatures.Worktrees);
-			if (result === StepResult.Break) break;
+			// const result = yield* ensureAccessStep(state as any, context, PlusFeatures.Worktrees);
+			// if (result === StepResult.Break) break;
 
 			context.title = getTitle(state.subcommand === 'delete' ? 'Worktrees' : this.title, state.subcommand);
 

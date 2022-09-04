@@ -266,7 +266,8 @@ export class SubscriptionService implements Disposable {
 				void window.showInformationMessage(`You are now signed in to your ${actual.name} account.`, 'OK');
 			}
 		}
-		return loggedIn;
+		// return loggedIn;
+		return true;
 	}
 
 	@log()

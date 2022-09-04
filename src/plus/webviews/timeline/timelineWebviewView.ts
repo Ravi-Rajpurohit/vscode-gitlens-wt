@@ -202,18 +202,18 @@ export class TimelineWebviewView extends WebviewViewBase<State> {
 		const shortDateFormat = this.container.config.defaultDateShortFormat ?? 'short';
 		const period = current.period ?? defaultPeriod;
 
-		if (!access.allowed) {
-			const dataset = generateRandomTimelineDataset();
-			return {
-				dataset: dataset.sort((a, b) => b.sort - a.sort),
-				period: period,
-				title: 'src/app/index.ts',
-				uri: Uri.file('src/app/index.ts').toString(),
-				dateFormat: dateFormat,
-				shortDateFormat: shortDateFormat,
-				access: access,
-			};
-		}
+		// if (!access.allowed) {
+		// 	const dataset = generateRandomTimelineDataset();
+		// 	return {
+		// 		dataset: dataset.sort((a, b) => b.sort - a.sort),
+		// 		period: period,
+		// 		title: 'src/app/index.ts',
+		// 		uri: Uri.file('src/app/index.ts').toString(),
+		// 		dateFormat: dateFormat,
+		// 		shortDateFormat: shortDateFormat,
+		// 		access: access,
+		// 	};
+		// }
 
 		if (current.uri == null) {
 			return {

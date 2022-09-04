@@ -2234,42 +2234,38 @@ export async function* ensureAccessStep<
 	State extends PartialStepState & { repo: Repository },
 	Context extends { repos: Repository[]; title: string },
 >(state: State, context: Context, feature: PlusFeatures): AsyncStepResultGenerator<void> {
-	const access = await Container.instance.git.access(feature, state.repo.path);
-	if (access.allowed) return undefined;
-
-	const directives: DirectiveQuickPickItem[] = [];
-	let placeholder: string;
-	if (access.subscription.current.account?.verified === false) {
-		directives.push(DirectiveQuickPickItem.create(Directive.RequiresVerification, true));
-		placeholder = 'You must verify your account email address before you can continue';
-	} else {
-		if (access.subscription.required == null) return undefined;
-
-		if (isSubscriptionPaidPlan(access.subscription.required) && access.subscription.current.account != null) {
-			directives.push(DirectiveQuickPickItem.create(Directive.RequiresPaidSubscription, true));
-			placeholder = 'GitLens+ features require an upgraded account';
-		} else {
-			if (
-				access.subscription.current.account == null &&
-				!isSubscriptionPreviewTrialExpired(access.subscription.current)
-			) {
-				directives.push(
-					DirectiveQuickPickItem.create(Directive.StartPreviewTrial, true),
-					DirectiveQuickPickItem.create(Directive.RequiresFreeSubscription),
-				);
-			} else {
-				directives.push(DirectiveQuickPickItem.create(Directive.RequiresFreeSubscription));
-			}
-			placeholder = 'GitLens+ features require a free account';
-		}
-	}
-
-	const step = QuickCommand.createPickStep<DirectiveQuickPickItem>({
-		title: appendReposToTitle(context.title, state, context),
-		placeholder: placeholder,
-		items: [...directives, DirectiveQuickPickItem.create(Directive.Cancel)],
-	});
-
-	const selection: StepSelection<typeof step> = yield step;
-	return QuickCommand.canPickStepContinue(step, state, selection) ? undefined : StepResult.Break;
+	// const access = await Container.instance.git.access(feature, state.repo.path);
+	// if (access.allowed) return undefined;
+	// const directives: DirectiveQuickPickItem[] = [];
+	// let placeholder: string;
+	// if (access.subscription.current.account?.verified === false) {
+	// 	directives.push(DirectiveQuickPickItem.create(Directive.RequiresVerification, true));
+	// 	placeholder = 'You must verify your account email address before you can continue';
+	// } else {
+	// 	if (access.subscription.required == null) return undefined;
+	// 	if (isSubscriptionPaidPlan(access.subscription.required) && access.subscription.current.account != null) {
+	// 		directives.push(DirectiveQuickPickItem.create(Directive.RequiresPaidSubscription, true));
+	// 		placeholder = 'GitLens+ features require an upgraded account';
+	// 	} else {
+	// 		if (
+	// 			access.subscription.current.account == null &&
+	// 			!isSubscriptionPreviewTrialExpired(access.subscription.current)
+	// 		) {
+	// 			directives.push(
+	// 				DirectiveQuickPickItem.create(Directive.StartPreviewTrial, true),
+	// 				DirectiveQuickPickItem.create(Directive.RequiresFreeSubscription),
+	// 			);
+	// 		} else {
+	// 			directives.push(DirectiveQuickPickItem.create(Directive.RequiresFreeSubscription));
+	// 		}
+	// 		placeholder = 'GitLens+ features require a free account';
+	// 	}
+	// }
+	// const step = QuickCommand.createPickStep<DirectiveQuickPickItem>({
+	// 	title: appendReposToTitle(context.title, state, context),
+	// 	placeholder: placeholder,
+	// 	items: [...directives, DirectiveQuickPickItem.create(Directive.Cancel)],
+	// });
+	// const selection: StepSelection<typeof step> = yield step;
+	// return QuickCommand.canPickStepContinue(step, state, selection) ? undefined : StepResult.Break;
 }

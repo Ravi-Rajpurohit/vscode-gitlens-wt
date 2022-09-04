@@ -319,17 +319,14 @@ export abstract class SubscribeableViewNode<TView extends View = View> extends V
 	@debug()
 	async ensureSubscription() {
 		// We only need to subscribe if we are visible and if auto-refresh enabled (when supported)
-		if (!this.canSubscribe || !this.view.visible || (canAutoRefreshView(this.view) && !this.view.autoRefresh)) {
-			await this.unsubscribe();
-
-			return;
-		}
-
-		// If we already have a subscription, just kick out
-		if (this.subscription != null) return;
-
-		this.subscription = Promise.resolve(this.subscribe());
-		void (await this.subscription);
+		// if (!this.canSubscribe || !this.view.visible || (canAutoRefreshView(this.view) && !this.view.autoRefresh)) {
+		// 	await this.unsubscribe();
+		// 	return;
+		// }
+		// // If we already have a subscription, just kick out
+		// if (this.subscription != null) return;
+		// this.subscription = Promise.resolve(this.subscribe());
+		// void (await this.subscription);
 	}
 
 	@gate()

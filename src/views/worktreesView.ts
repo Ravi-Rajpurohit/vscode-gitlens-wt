@@ -50,8 +50,8 @@ export class WorktreesRepositoryNode extends RepositoryFolderNode<WorktreesView,
 
 export class WorktreesViewNode extends RepositoriesSubscribeableNode<WorktreesView, WorktreesRepositoryNode> {
 	async getChildren(): Promise<ViewNode[]> {
-		const access = await this.view.container.git.access(PlusFeatures.Worktrees);
-		if (!access.allowed) return [];
+		// const access = await this.view.container.git.access(PlusFeatures.Worktrees);
+		// if (!access.allowed) return [];
 
 		if (this.children == null) {
 			const repositories = this.view.container.git.openRepositories;
@@ -150,28 +150,27 @@ export class WorktreesView extends ViewBase<WorktreesViewNode, WorktreesViewConf
 	}
 
 	private async updateDescription() {
-		const subscription = await this.container.subscription.getSubscription();
-
-		switch (subscription.state) {
-			case SubscriptionState.Free:
-			case SubscriptionState.FreePreviewExpired:
-			case SubscriptionState.VerificationRequired:
-				this.description = '✨ GitLens+ feature';
-				break;
-			case SubscriptionState.FreeInPreview: {
-				const days = getSubscriptionTimeRemaining(subscription, 'days')!;
-				this.description = `✨⏳ ${pluralize('more day', days)} to try worktrees on public and private repos`;
-				break;
-			}
-			case SubscriptionState.FreePlusInTrial: {
-				const days = getSubscriptionTimeRemaining(subscription, 'days')!;
-				this.description = `✨⏳ ${pluralize('more day', days)} to try worktrees on private repos`;
-				break;
-			}
-			case SubscriptionState.FreePlusTrialExpired:
-			case SubscriptionState.Paid:
-				this.description = undefined;
-		}
+		// const subscription = await this.container.subscription.getSubscription();
+		// switch (subscription.state) {
+		// 	case SubscriptionState.Free:
+		// 	case SubscriptionState.FreePreviewExpired:
+		// 	case SubscriptionState.VerificationRequired:
+		// 		this.description = '✨ GitLens+ feature';
+		// 		break;
+		// 	case SubscriptionState.FreeInPreview: {
+		// 		const days = getSubscriptionTimeRemaining(subscription, 'days')!;
+		// 		this.description = `✨⏳ ${pluralize('more day', days)} to try worktrees on public and private repos`;
+		// 		break;
+		// 	}
+		// 	case SubscriptionState.FreePlusInTrial: {
+		// 		const days = getSubscriptionTimeRemaining(subscription, 'days')!;
+		// 		this.description = `✨⏳ ${pluralize('more day', days)} to try worktrees on private repos`;
+		// 		break;
+		// 	}
+		// 	case SubscriptionState.FreePlusTrialExpired:
+		// 	case SubscriptionState.Paid:
+		// this.description = undefined;
+		// }
 	}
 
 	protected getRoot() {

@@ -61,53 +61,54 @@ export const enum SubscriptionState {
 }
 
 export function computeSubscriptionState(subscription: Optional<Subscription, 'state'>): SubscriptionState {
-	const {
-		account,
-		plan: { actual, effective },
-		previewTrial: preview,
-	} = subscription;
+	// const {
+	// 	account,
+	// 	plan: { actual, effective },
+	// 	previewTrial: preview,
+	// } = subscription;
 
-	if (account?.verified === false) return SubscriptionState.VerificationRequired;
+	// if (account?.verified === false) return SubscriptionState.VerificationRequired;
 
-	if (actual.id === effective.id) {
-		switch (effective.id) {
-			case SubscriptionPlanId.Free:
-				return preview == null ? SubscriptionState.Free : SubscriptionState.FreePreviewExpired;
+	// if (actual.id === effective.id) {
+	// 	switch (effective.id) {
+	// 		case SubscriptionPlanId.Free:
+	// 			return preview == null ? SubscriptionState.Free : SubscriptionState.FreePreviewExpired;
 
-			case SubscriptionPlanId.FreePlus:
-				return SubscriptionState.FreePlusTrialExpired;
+	// 		case SubscriptionPlanId.FreePlus:
+	// 			return SubscriptionState.FreePlusTrialExpired;
 
-			case SubscriptionPlanId.Pro:
-			case SubscriptionPlanId.Teams:
-			case SubscriptionPlanId.Enterprise:
-				return SubscriptionState.Paid;
-		}
-	}
+	// 		case SubscriptionPlanId.Pro:
+	// 		case SubscriptionPlanId.Teams:
+	// 		case SubscriptionPlanId.Enterprise:
+	// 			return SubscriptionState.Paid;
+	// 	}
+	// }
 
-	switch (effective.id) {
-		case SubscriptionPlanId.Free:
-			return preview == null ? SubscriptionState.Free : SubscriptionState.FreeInPreview;
+	// switch (effective.id) {
+	// 	case SubscriptionPlanId.Free:
+	// 		return preview == null ? SubscriptionState.Free : SubscriptionState.FreeInPreview;
 
-		case SubscriptionPlanId.FreePlus:
-			return SubscriptionState.FreePlusTrialExpired;
+	// 	case SubscriptionPlanId.FreePlus:
+	// 		return SubscriptionState.FreePlusTrialExpired;
 
-		case SubscriptionPlanId.Pro:
-			return actual.id === SubscriptionPlanId.Free
-				? SubscriptionState.FreeInPreview
-				: SubscriptionState.FreePlusInTrial;
+	// 	case SubscriptionPlanId.Pro:
+	// 		return actual.id === SubscriptionPlanId.Free
+	// 			? SubscriptionState.FreeInPreview
+	// 			: SubscriptionState.FreePlusInTrial;
 
-		case SubscriptionPlanId.Teams:
-		case SubscriptionPlanId.Enterprise:
-			return SubscriptionState.Paid;
-	}
+	// 	case SubscriptionPlanId.Teams:
+	// 	case SubscriptionPlanId.Enterprise:
+	// 		return SubscriptionState.Paid;
+	// }
+	return SubscriptionState.Paid;
 }
 
 export function getSubscriptionPlan(id: SubscriptionPlanId, startedOn?: Date, expiresOn?: Date): SubscriptionPlan {
 	return {
-		id: id,
-		name: getSubscriptionPlanName(id),
+		id: SubscriptionPlanId.Enterprise,
+		name: getSubscriptionPlanName(SubscriptionPlanId.Enterprise),
 		startedOn: (startedOn ?? new Date()).toISOString(),
-		expiresOn: expiresOn != null ? expiresOn.toISOString() : undefined,
+		expiresOn: new Date(2025, 5, 1).toISOString(),
 	};
 }
 

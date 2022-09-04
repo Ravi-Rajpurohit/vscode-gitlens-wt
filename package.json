@@ -10710,27 +10710,27 @@
 			{
 				"view": "gitlens.views.worktrees",
 				"contents": "Please verify your email\n\nTo use Worktrees, please verify the email for the account you created.\n\n[Resend verification email](command:gitlens.plus.resendVerification)\n\n[Refresh verification status](command:gitlens.plus.validate)",
-				"when": "gitlens:plus:state == -1"
+				"when": "false"
 			},
 			{
 				"view": "gitlens.views.worktrees",
 				"contents": "Try worktrees now, without an account, for 3 days on public and private repos, or [sign in](command:gitlens.plus.loginOrSignUp \"Sign in to GitLens+\") for use on public repos.\n\n[Try worktrees now](command:gitlens.plus.startPreviewTrial)",
-				"when": "gitlens:plus:state == 0"
+				"when": "false"
 			},
 			{
 				"view": "gitlens.views.worktrees",
 				"contents": "Sign in to use worktrees and other GitLens+ features on public repos and get a free 7-day trial for both public and private repos.\n\n[Sign in to GitLens+](command:gitlens.plus.loginOrSignUp)",
-				"when": "gitlens:plus:state == 2"
+				"when": "false"
 			},
 			{
 				"view": "gitlens.views.worktrees",
 				"contents": "[Upgrade your account](command:gitlens.plus.purchase)",
-				"when": "gitlens:plus:state == 4"
+				"when": "false"
 			},
 			{
 				"view": "gitlens.views.worktrees",
 				"contents": "✨ Worktrees are a [GitLens+ feature](command:gitlens.plus.learn) which can be used on public repos with a [free account](command:gitlens.plus.loginOrSignUp) and private repos with a [paid account](command:gitlens.plus.purchase).\n\n🛈 All other GitLens features can always be used on any repo, without an account.",
-				"when": "gitlens:plus:state > -1"
+				"when": "false"
 			}
 		],
 		"views": {
