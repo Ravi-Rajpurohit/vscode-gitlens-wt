@@ -2,17 +2,19 @@
 /*global*/
 import './timeline.scss';
 import { provideVSCodeDesignSystem, vsCodeButton, vsCodeDropdown, vsCodeOption } from '@vscode/webview-ui-toolkit';
+import type { State } from '../../../../plus/webviews/timeline/protocol';
 import {
-	DidChangeStateNotificationType,
+	DidChangeNotificationType,
 	OpenDataPointCommandType,
-	State,
 	UpdatePeriodCommandType,
 } from '../../../../plus/webviews/timeline/protocol';
 import { SubscriptionPlanId, SubscriptionState } from '../../../../subscription';
-import { ExecuteCommandType, IpcMessage, onIpc } from '../../../protocol';
+import type { IpcMessage } from '../../../protocol';
+import { ExecuteCommandType, onIpc } from '../../../protocol';
 import { App } from '../../shared/appBase';
 import { DOM } from '../../shared/dom';
-import { DataPointClickEvent, TimelineChart } from './chart';
+import type { DataPointClickEvent } from './chart';
+import { TimelineChart } from './chart';
 
 export class TimelineApp extends App<State> {
 	private _chart: TimelineChart | undefined;
@@ -22,13 +24,7 @@ export class TimelineApp extends App<State> {
 	}
 
 	protected override onInitialize() {
-		provideVSCodeDesignSystem().register({
-			register: function (container: any, context: any) {
-				vsCodeButton().register(container, context);
-				vsCodeDropdown().register(container, context);
-				vsCodeOption().register(container, context);
-			},
-		});
+		provideVSCodeDesignSystem().register(vsCodeButton(), vsCodeDropdown(), vsCodeOption());
 
 		this.updateState();
 	}
@@ -51,10 +47,10 @@ export class TimelineApp extends App<State> {
 		const msg = e.data as IpcMessage;
 
 		switch (msg.method) {
-			case DidChangeStateNotificationType.method:
+			case DidChangeNotificationType.method:
 				this.log(`${this.appName}.onMessageReceived(${msg.id}): name=${msg.method}`);
 
-				onIpc(DidChangeStateNotificationType, msg, params => {
+				onIpc(DidChangeNotificationType, msg, params => {
 					this.state = params.state;
 					this.updateState();
 				});

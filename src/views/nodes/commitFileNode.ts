@@ -1,13 +1,18 @@
-import { Command, MarkdownString, Selection, TreeItem, TreeItemCollapsibleState, Uri } from 'vscode';
+import type { Command, Selection } from 'vscode';
+import { MarkdownString, TreeItem, TreeItemCollapsibleState, Uri } from 'vscode';
 import type { DiffWithPreviousCommandArgs } from '../../commands';
 import { Commands } from '../../constants';
-import { StatusFileFormatter } from '../../git/formatters';
+import { StatusFileFormatter } from '../../git/formatters/statusFormatter';
 import { GitUri } from '../../git/gitUri';
-import { GitBranch, GitCommit, GitFile, GitRevisionReference } from '../../git/models';
+import type { GitBranch } from '../../git/models/branch';
+import type { GitCommit } from '../../git/models/commit';
+import { GitFile } from '../../git/models/file';
+import type { GitRevisionReference } from '../../git/models/reference';
 import { joinPaths, relativeDir } from '../../system/path';
-import { FileHistoryView } from '../fileHistoryView';
-import { View, ViewsWithCommits } from '../viewBase';
-import { ContextValues, ViewNode, ViewRefFileNode } from './viewNode';
+import type { FileHistoryView } from '../fileHistoryView';
+import type { View, ViewsWithCommits } from '../viewBase';
+import type { ViewNode } from './viewNode';
+import { ContextValues, ViewRefFileNode } from './viewNode';
 
 export class CommitFileNode<TView extends View = ViewsWithCommits | FileHistoryView> extends ViewRefFileNode<TView> {
 	constructor(

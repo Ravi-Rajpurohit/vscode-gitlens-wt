@@ -1,6 +1,6 @@
+import { configuration } from '../../configuration';
 import { GlyphChars } from '../../constants';
-import { Container } from '../../container';
-import { GitBranch } from './branch';
+import { getBranchNameWithoutRemote } from './branch';
 
 const rangeRegex = /^(\S*?)(\.\.\.?)(\S*)\s*$/;
 const shaLikeRegex = /(^[0-9a-f]{40}([\^@~:]\S*)?$)|(^[0]{40}(:|-)$)/;
@@ -53,28 +53,25 @@ export namespace GitRevision {
 
 	export function shorten(
 		ref: string | undefined,
-		{
-			force,
-			strings = {},
-		}: {
+		options?: {
 			force?: boolean;
 			strings?: { uncommitted?: string; uncommittedStaged?: string; working?: string };
-		} = {},
+		},
 	) {
 		if (ref === deletedOrMissing) return '(deleted)';
 
-		if (!ref) return strings.working ?? '';
+		if (!ref) return options?.strings?.working ?? '';
 		if (isUncommitted(ref)) {
 			return isUncommittedStaged(ref)
-				? strings.uncommittedStaged ?? 'Index'
-				: strings.uncommitted ?? 'Working Tree';
+				? options?.strings?.uncommittedStaged ?? 'Index'
+				: options?.strings?.uncommitted ?? 'Working Tree';
 		}
 
 		if (GitRevision.isRange(ref)) return ref;
-		if (!force && !isShaLike(ref)) return ref;
+		if (!options?.force && !isShaLike(ref)) return ref;
 
 		// Don't allow shas to be shortened to less than 5 characters
-		const len = Math.max(5, Container.instance.config.advanced.abbreviatedShaLength);
+		const len = Math.max(5, configuration.get('advanced.abbreviatedShaLength'));
 
 		// If we have a suffix, append it
 		const match = shaShortenRegex.exec(ref);
@@ -221,7 +218,7 @@ export namespace GitReference {
 
 	export function getNameWithoutRemote(ref: GitReference) {
 		if (ref.refType === 'branch') {
-			return ref.remote ? GitBranch.getNameWithoutRemote(ref.name) : ref.name;
+			return ref.remote ? getBranchNameWithoutRemote(ref.name) : ref.name;
 		}
 		return ref.name;
 	}
@@ -239,7 +236,7 @@ export namespace GitReference {
 	}
 
 	export function isStash(ref: GitReference | undefined): ref is GitStashReference {
-		return ref?.refType === 'stash' || (ref?.refType === 'revision' && (ref as any)?.stashName);
+		return ref?.refType === 'stash' || (ref?.refType === 'revision' && Boolean((ref as any)?.stashName));
 	}
 
 	export function isTag(ref: GitReference | undefined): ref is GitTagReference {

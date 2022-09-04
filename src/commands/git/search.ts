@@ -1,25 +1,27 @@
+import { configuration } from '../../configuration';
 import { ContextKeys, GlyphChars } from '../../constants';
-import { Container } from '../../container';
+import type { Container } from '../../container';
 import { getContext } from '../../context';
-import { GitCommit, GitLog, Repository } from '../../git/models';
-import { searchOperators, SearchOperators, SearchPattern } from '../../git/search';
-import { ActionQuickPickItem, QuickPickItemOfT } from '../../quickpicks/items/common';
+import type { GitCommit } from '../../git/models/commit';
+import type { GitLog } from '../../git/models/log';
+import type { Repository } from '../../git/models/repository';
+import type { SearchOperators } from '../../git/search';
+import { searchOperators, SearchPattern } from '../../git/search';
+import type { QuickPickItemOfT } from '../../quickpicks/items/common';
+import { ActionQuickPickItem } from '../../quickpicks/items/common';
 import { pluralize } from '../../system/string';
-import { SearchResultsNode } from '../../views/nodes';
-import { ViewsWithRepositoryFolders } from '../../views/viewBase';
+import { SearchResultsNode } from '../../views/nodes/searchResultsNode';
+import type { ViewsWithRepositoryFolders } from '../../views/viewBase';
+import { GitActions } from '../gitCommands.actions';
 import { getSteps } from '../gitCommands.utils';
+import type { PartialStepState, StepGenerator, StepResultGenerator, StepSelection, StepState } from '../quickCommand';
 import {
 	appendReposToTitle,
-	PartialStepState,
 	pickCommitStep,
 	pickRepositoryStep,
 	QuickCommand,
 	QuickCommandButtons,
-	StepGenerator,
 	StepResult,
-	StepResultGenerator,
-	StepSelection,
-	StepState,
 } from '../quickCommand';
 
 interface Context {
@@ -34,6 +36,7 @@ interface Context {
 
 interface State extends Required<SearchPattern> {
 	repo: string | Repository;
+	openPickInView?: boolean;
 	showResultsInSideBar: boolean | SearchResultsNode;
 }
 
@@ -104,7 +107,7 @@ export class SearchGitCommand extends QuickCommand<State> {
 			title: this.title,
 		};
 
-		const cfg = this.container.config.gitCommands.search;
+		const cfg = configuration.get('gitCommands.search');
 		if (state.matchAll == null) {
 			state.matchAll = cfg.matchAll;
 		}
@@ -170,7 +173,6 @@ export class SearchGitCommand extends QuickCommand<State> {
 				context.resultsKey = searchKey;
 			}
 
-			// eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
 			if (state.showResultsInSideBar) {
 				void this.container.searchAndCompareView.search(
 					state.repo.path,
@@ -241,17 +243,27 @@ export class SearchGitCommand extends QuickCommand<State> {
 				context.commit = result;
 			}
 
-			const result = yield* getSteps(
-				this.container,
-				{
-					command: 'show',
-					state: {
-						repo: state.repo,
-						reference: context.commit,
+			let result: StepResult<ReturnType<typeof getSteps>>;
+			if (state.openPickInView) {
+				void GitActions.Commit.showDetailsView(context.commit, {
+					pin: false,
+					preserveFocus: false,
+				});
+				result = StepResult.Break;
+			} else {
+				result = yield* getSteps(
+					this.container,
+					{
+						command: 'show',
+						state: {
+							repo: state.repo,
+							reference: context.commit,
+						},
 					},
-				},
-				this.pickedVia,
-			);
+					this.pickedVia,
+				);
+			}
+
 			state.counter--;
 			if (result === StepResult.Break) {
 				QuickCommand.endSteps(state);
@@ -306,6 +318,7 @@ export class SearchGitCommand extends QuickCommand<State> {
 			additionalButtons: [matchCaseButton, matchAllButton, matchRegexButton],
 			items: items,
 			value: state.pattern,
+			selectValueWhenShown: false,
 			onDidAccept: (quickpick): boolean => {
 				const pick = quickpick.selectedItems[0];
 				if (!searchOperators.has(pick.item)) return true;

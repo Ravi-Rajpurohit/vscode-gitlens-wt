@@ -1,10 +1,12 @@
 /*global*/
 import './home.scss';
 import { provideVSCodeDesignSystem, vsCodeButton } from '@vscode/webview-ui-toolkit';
-import { Disposable } from 'vscode';
+import type { Disposable } from 'vscode';
 import { getSubscriptionTimeRemaining, SubscriptionState } from '../../../subscription';
-import { CompletedActions, DidChangeSubscriptionNotificationType, State } from '../../home/protocol';
-import { ExecuteCommandType, IpcMessage, onIpc } from '../../protocol';
+import type { State } from '../../home/protocol';
+import { CompletedActions, DidChangeSubscriptionNotificationType } from '../../home/protocol';
+import type { IpcMessage } from '../../protocol';
+import { ExecuteCommandType, onIpc } from '../../protocol';
 import { App } from '../shared/appBase';
 import { DOM } from '../shared/dom';
 
@@ -17,11 +19,7 @@ export class HomeApp extends App<State> {
 	}
 
 	protected override onInitialize() {
-		provideVSCodeDesignSystem().register({
-			register: function (container: any, context: any) {
-				vsCodeButton().register(container, context);
-			},
-		});
+		provideVSCodeDesignSystem().register(vsCodeButton());
 
 		this.$slots = [
 			document.getElementById('slot1') as HTMLDivElement,
@@ -103,7 +101,13 @@ export class HomeApp extends App<State> {
 					const remaining = getSubscriptionTimeRemaining(subscription, 'days') ?? 0;
 					DOM.insertTemplate('state:free-preview', this.$slots[index++], {
 						bindings: {
-							previewDays: `${remaining === 1 ? `${remaining} day` : `${remaining} days`}`,
+							previewDays: `${
+								remaining < 1
+									? 'less than one day'
+									: remaining === 1
+									? `${remaining} day`
+									: `${remaining} days`
+							}`,
 						},
 					});
 
@@ -126,7 +130,13 @@ export class HomeApp extends App<State> {
 					DOM.insertTemplate('state:plus-trial', this.$slots[index++], {
 						bindings: {
 							plan: subscription.plan.effective.name,
-							trialDays: `${remaining === 1 ? `${remaining} day` : `${remaining} days`}`,
+							trialDays: `${
+								remaining < 1
+									? 'less than one day'
+									: remaining === 1
+									? `${remaining} day`
+									: `${remaining} days`
+							}`,
 						},
 					});
 

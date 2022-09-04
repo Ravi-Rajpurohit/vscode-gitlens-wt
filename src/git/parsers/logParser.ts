@@ -1,22 +1,17 @@
-import { Range } from 'vscode';
+import type { Range } from 'vscode';
 import type { Container } from '../../container';
 import { filterMap } from '../../system/array';
 import { debug } from '../../system/decorators/log';
 import { normalizePath, relative } from '../../system/path';
 import { getLines } from '../../system/string';
-import {
-	GitCommit,
-	GitCommitIdentity,
-	GitCommitLine,
-	GitFile,
-	GitFileChange,
-	GitFileChangeStats,
-	GitFileIndexStatus,
-	GitLog,
-	GitRevision,
-	GitUser,
-	isUserMatch,
-} from '../models';
+import type { GitCommitLine } from '../models/commit';
+import { GitCommit, GitCommitIdentity } from '../models/commit';
+import type { GitFile, GitFileChangeStats } from '../models/file';
+import { GitFileChange, GitFileIndexStatus } from '../models/file';
+import type { GitLog } from '../models/log';
+import { GitRevision } from '../models/reference';
+import type { GitUser } from '../models/user';
+import { isUserMatch } from '../models/user';
 
 const diffRegex = /diff --git a\/(.*) b\/(.*)/;
 const diffRangeRegex = /^@@ -(\d+?),(\d+?) \+(\d+?),(\d+?) @@/;
@@ -66,6 +61,7 @@ interface LogEntry {
 	fileStats?: GitFileChangeStats;
 
 	summary?: string;
+	tips?: string[];
 
 	line?: GitCommitLine;
 }
@@ -82,6 +78,7 @@ type ParserWithFiles<T> = {
 	parse: (data: string) => Generator<ParsedEntryWithFiles<T>>;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class GitLogParser {
 	static readonly shortstatRegex =
 		/(?<files>\d+) files? changed(?:, (?<additions>\d+) insertions?\(\+\))?(?:, (?<deletions>\d+) deletions?\(-\))?/;
@@ -113,6 +110,23 @@ export class GitLogParser {
 		}
 		return this._defaultParser;
 	}
+
+	static allFormat = [
+		`${lb}${sl}f${rb}`,
+		`${lb}r${rb}${sp}%H`, // ref
+		`${lb}a${rb}${sp}%aN`, // author
+		`${lb}e${rb}${sp}%aE`, // author email
+		`${lb}d${rb}${sp}%at`, // author date
+		`${lb}n${rb}${sp}%cN`, // committer
+		`${lb}m${rb}${sp}%cE`, // committer email
+		`${lb}c${rb}${sp}%ct`, // committer date
+		`${lb}p${rb}${sp}%P`, // parents
+		`${lb}t${rb}${sp}%D`, // tips
+		`${lb}s${rb}`,
+		'%B', // summary
+		`${lb}${sl}s${rb}`,
+		`${lb}f${rb}`,
+	].join('%n');
 
 	static defaultFormat = [
 		`${lb}${sl}f${rb}`,
@@ -169,7 +183,7 @@ export class GitLogParser {
 			const fields = getLines(data, options?.separator ?? '\0');
 			if (options?.skip) {
 				for (let i = 0; i < options.skip; i++) {
-					field = fields.next();
+					fields.next();
 				}
 			}
 
@@ -213,9 +227,9 @@ export class GitLogParser {
 		return { arguments: args, parse: parse };
 	}
 
-	static createWithFiles<T extends Record<string, string>>(fieldMapping: T): ParserWithFiles<T> {
-		let format = '%x00%x00';
-		const keys: (keyof T)[] = [];
+	static createWithFiles<T extends Record<string, unknown>>(fieldMapping: ExtractAll<T, string>): ParserWithFiles<T> {
+		let format = '%x00';
+		const keys: (keyof ExtractAll<T, string>)[] = [];
 		for (const key in fieldMapping) {
 			keys.push(key);
 			format += `%x00${fieldMapping[key]}`;
@@ -224,23 +238,20 @@ export class GitLogParser {
 		const args = ['-z', `--format=${format}`, '--name-status'];
 
 		function* parse(data: string): Generator<ParsedEntryWithFiles<T>> {
-			const records = getLines(data, '\0\0\0\0');
+			const records = getLines(data, '\0\0\0');
 
 			let entry: ParsedEntryWithFiles<T>;
 			let files: ParsedEntryFile[];
 			let fields: IterableIterator<string>;
 
-			let first = true;
-			for (let record of records) {
-				if (first) {
-					first = false;
-					// Fix the first record (since it only has 3 nulls)
-					record = record.slice(3);
-				}
-
+			for (const record of records) {
 				entry = {} as any;
 				files = [];
 				fields = getLines(record, '\0');
+
+				// Skip the 2 starting NULs
+				fields.next();
+				fields.next();
 
 				let fieldCount = 0;
 				let field;
@@ -259,6 +270,8 @@ export class GitLogParser {
 							field = fields.next();
 							file.originalPath = field.value;
 						}
+
+						files.push(file);
 					}
 				}
 
@@ -282,10 +295,11 @@ export class GitLogParser {
 		limit: number | undefined,
 		reverse: boolean,
 		range: Range | undefined,
+		hasMoreOverride?: boolean,
 	): GitLog | undefined {
 		if (!data) return undefined;
 
-		let relativeFileName: string;
+		let relativeFileName: string | undefined;
 
 		let entry: LogEntry = {};
 		let line: string | undefined = undefined;
@@ -359,7 +373,13 @@ export class GitLogParser {
 					break;
 
 				case 112: // 'p': // parents
-					entry.parentShas = line.substring(4).split(' ');
+					line = line.substring(4);
+					entry.parentShas = line.length !== 0 ? line.split(' ') : undefined;
+					break;
+
+				case 116: // 't': // tips
+					line = line.substring(4);
+					entry.tips = line.length !== 0 ? line.split(', ') : undefined;
 					break;
 
 				case 115: // 's': // summary
@@ -536,7 +556,11 @@ export class GitLogParser {
 						);
 						relativeFileName = normalizePath(relative(repoPath, fileName));
 					} else {
-						relativeFileName = entry.path!;
+						relativeFileName =
+							entry.path ??
+							(repoPath != null && fileName != null
+								? normalizePath(relative(repoPath, fileName))
+								: undefined);
 					}
 					first = false;
 
@@ -572,7 +596,7 @@ export class GitLogParser {
 			count: i,
 			limit: limit,
 			range: range,
-			hasMore: Boolean(truncationCount && i > truncationCount && truncationCount !== 1),
+			hasMore: hasMoreOverride ?? Boolean(truncationCount && i > truncationCount && truncationCount !== 1),
 		};
 		return log;
 	}
@@ -583,7 +607,7 @@ export class GitLogParser {
 		commit: GitCommit | undefined,
 		type: LogType,
 		repoPath: string | undefined,
-		relativeFileName: string,
+		relativeFileName: string | undefined,
 		commits: Map<string, GitCommit>,
 		currentUser: GitUser | undefined,
 	): void {
@@ -605,7 +629,7 @@ export class GitLogParser {
 			const files: { file?: GitFileChange; files?: GitFileChange[] } = {
 				files: entry.files?.map(f => new GitFileChange(repoPath!, f.path, f.status, f.originalPath)),
 			};
-			if (type === LogType.LogFile) {
+			if (type === LogType.LogFile && relativeFileName != null) {
 				files.file = new GitFileChange(
 					repoPath!,
 					relativeFileName,
@@ -632,6 +656,7 @@ export class GitLogParser {
 				files,
 				undefined,
 				entry.line != null ? [entry.line] : [],
+				entry.tips,
 			);
 
 			commits.set(entry.sha!, commit);

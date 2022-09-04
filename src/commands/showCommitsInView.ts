@@ -1,14 +1,15 @@
-import { TextEditor, Uri } from 'vscode';
+import type { TextEditor, Uri } from 'vscode';
 import { executeGitCommand } from '../commands/gitCommands.actions';
 import { Commands } from '../constants';
 import type { Container } from '../container';
 import { GitUri } from '../git/gitUri';
 import { SearchPattern } from '../git/search';
 import { Logger } from '../logger';
-import { Messages } from '../messages';
+import { showFileNotUnderSourceControlWarningMessage, showGenericErrorMessage } from '../messages';
 import { command } from '../system/command';
 import { filterMap } from '../system/iterable';
-import { ActiveEditorCommand, getCommandUri } from './base';
+import type { CommandContext } from './base';
+import { ActiveEditorCommand, getCommandUri, isCommandContextViewNodeHasCommit } from './base';
 
 export interface ShowCommitsInViewCommandArgs {
 	refs?: string[];
@@ -19,6 +20,18 @@ export interface ShowCommitsInViewCommandArgs {
 export class ShowCommitsInViewCommand extends ActiveEditorCommand {
 	constructor(private readonly container: Container) {
 		super([Commands.ShowCommitInView, Commands.ShowCommitsInView]);
+	}
+
+	protected override preExecute(context: CommandContext, args?: ShowCommitsInViewCommandArgs) {
+		if (context.type === 'viewItem') {
+			args = { ...args };
+			if (isCommandContextViewNodeHasCommit(context)) {
+				args.refs = [context.node.commit.sha];
+				args.repoPath = context.node.commit.repoPath;
+			}
+		}
+
+		return this.execute(context.editor, context.uri, args);
 	}
 
 	async execute(editor?: TextEditor, uri?: Uri, args?: ShowCommitsInViewCommandArgs) {
@@ -43,19 +56,25 @@ export class ShowCommitsInViewCommand extends ActiveEditorCommand {
 						  )
 						: await this.container.git.getBlameForRange(gitUri, editor.selection);
 					if (blame === undefined) {
-						return Messages.showFileNotUnderSourceControlWarningMessage('Unable to find commits');
+						return showFileNotUnderSourceControlWarningMessage('Unable to find commits');
 					}
 
 					args.refs = [...filterMap(blame.commits.values(), c => (c.isUncommitted ? undefined : c.ref))];
 				} catch (ex) {
 					Logger.error(ex, 'ShowCommitsInViewCommand', 'getBlameForRange');
-					return Messages.showGenericErrorMessage('Unable to find commits');
+					return showGenericErrorMessage('Unable to find commits');
 				}
 			} else {
 				if (gitUri.sha == null) return undefined;
 
 				args.refs = [gitUri.sha];
 			}
+		}
+
+		if (args.refs.length === 1) {
+			return this.container.commitDetailsView.show({
+				commit: { ref: args.refs[0], refType: 'revision', repoPath: args.repoPath!, name: '' },
+			});
 		}
 
 		return executeGitCommand({

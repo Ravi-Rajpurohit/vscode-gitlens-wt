@@ -1,15 +1,24 @@
+import * as process from 'process';
+import type { CancellationToken } from 'vscode';
 import { Uri, window, workspace } from 'vscode';
 import { hrtime } from '@env/hrtime';
 import { GlyphChars } from '../../../constants';
-import { GitCommandOptions, GitErrorHandling } from '../../../git/commandOptions';
-import { GitDiffFilter, GitRevision, GitUser } from '../../../git/models';
-import { GitBranchParser, GitLogParser, GitReflogParser, GitStashParser, GitTagParser } from '../../../git/parsers';
+import type { GitCommandOptions } from '../../../git/commandOptions';
+import { GitErrorHandling } from '../../../git/commandOptions';
+import type { GitDiffFilter } from '../../../git/models/diff';
+import { GitRevision } from '../../../git/models/reference';
+import type { GitUser } from '../../../git/models/user';
+import { GitBranchParser } from '../../../git/parsers/branchParser';
+import { GitLogParser } from '../../../git/parsers/logParser';
+import { GitReflogParser } from '../../../git/parsers/reflogParser';
+import { GitTagParser } from '../../../git/parsers/tagParser';
 import { Logger } from '../../../logger';
 import { dirname, isAbsolute, isFolderGlob, joinPaths, normalizePath, splitPath } from '../../../system/path';
 import { getDurationMilliseconds } from '../../../system/string';
 import { compare, fromString } from '../../../system/version';
-import { GitLocation } from './locator';
-import { fsExists, run, RunError, RunOptions } from './shell';
+import type { GitLocation } from './locator';
+import type { RunOptions } from './shell';
+import { fsExists, run, RunError } from './shell';
 
 const emptyArray = Object.freeze([]) as unknown as any[];
 const emptyObj = Object.freeze({});
@@ -556,6 +565,7 @@ export class Git {
 			'--name-status',
 			`-M${similarityThreshold == null ? '' : `${similarityThreshold}%`}`,
 			'--no-ext-diff',
+			'-z',
 		];
 		if (filters != null && filters.length !== 0) {
 			params.push(`--diff-filter=${filters.join('')}`);
@@ -688,19 +698,21 @@ export class Git {
 			ordering,
 			similarityThreshold,
 			since,
+			until,
 		}: {
 			all?: boolean;
 			argsOrFormat?: string | string[];
 			authors?: GitUser[];
 			limit?: number;
 			merges?: boolean;
-			ordering?: string | null;
+			ordering?: 'date' | 'author-date' | 'topo' | null;
 			similarityThreshold?: number | null;
-			since?: string;
+			since?: number | string;
+			until?: number | string;
 		},
 	) {
 		if (argsOrFormat == null) {
-			argsOrFormat = ['--name-status', `--format=${GitLogParser.defaultFormat}`];
+			argsOrFormat = ['--name-status', `--format=${all ? GitLogParser.allFormat : GitLogParser.defaultFormat}`];
 		}
 
 		if (typeof argsOrFormat === 'string') {
@@ -727,6 +739,10 @@ export class Git {
 			params.push(`--since="${since}"`);
 		}
 
+		if (until) {
+			params.push(`--until="${until}"`);
+		}
+
 		if (!merges) {
 			params.push('--first-parent');
 		}
@@ -739,7 +755,7 @@ export class Git {
 		}
 
 		if (all) {
-			params.push('--all');
+			params.push('--all', '--single-worktree');
 		}
 
 		if (ref && !GitRevision.isUncommittedStaged(ref)) {
@@ -748,6 +764,24 @@ export class Git {
 
 		return this.git<string>(
 			{ cwd: repoPath, configs: ['-c', 'diff.renameLimit=0', '-c', 'log.showSignature=false'] },
+			...params,
+			'--',
+		);
+	}
+
+	log2(repoPath: string, ref: string | undefined, stdin: string | undefined, ...args: unknown[]) {
+		const params = ['log', ...args];
+
+		if (ref && !GitRevision.isUncommittedStaged(ref)) {
+			params.push(ref);
+		}
+
+		if (stdin) {
+			params.push('--stdin');
+		}
+
+		return this.git<string>(
+			{ cwd: repoPath, configs: ['-c', 'diff.renameLimit=0', '-c', 'log.showSignature=false'], stdin: stdin },
 			...params,
 			'--',
 		);
@@ -780,7 +814,7 @@ export class Git {
 			filters?: GitDiffFilter[];
 			firstParent?: boolean;
 			limit?: number;
-			ordering?: string | null;
+			ordering?: 'date' | 'author-date' | 'topo' | null;
 			renames?: boolean;
 			reverse?: boolean;
 			since?: string;
@@ -792,7 +826,7 @@ export class Git {
 		const [file, root] = splitPath(fileName, repoPath, true);
 
 		if (argsOrFormat == null) {
-			argsOrFormat = [`--format=${GitLogParser.defaultFormat}`];
+			argsOrFormat = [`--format=${all ? GitLogParser.allFormat : GitLogParser.defaultFormat}`];
 		}
 
 		if (typeof argsOrFormat === 'string') {
@@ -818,7 +852,7 @@ export class Git {
 		}
 
 		if (all) {
-			params.push('--all');
+			params.push('--all', '--single-worktree');
 		}
 
 		// Can't allow rename detection (`--follow`) if `all` or a `startLine` is specified
@@ -873,29 +907,35 @@ export class Git {
 	async log__file_recent(
 		repoPath: string,
 		fileName: string,
-		{
-			ordering,
-			ref,
-			similarityThreshold,
-		}: { ordering?: string | null; ref?: string; similarityThreshold?: number | null } = {},
+		options?: {
+			ordering?: 'date' | 'author-date' | 'topo' | null;
+			ref?: string;
+			similarityThreshold?: number | null;
+			cancellation?: CancellationToken;
+		},
 	) {
 		const params = [
 			'log',
-			`-M${similarityThreshold == null ? '' : `${similarityThreshold}%`}`,
+			`-M${options?.similarityThreshold == null ? '' : `${options?.similarityThreshold}%`}`,
 			'-n1',
 			'--format=%H',
 		];
 
-		if (ordering) {
-			params.push(`--${ordering}-order`);
+		if (options?.ordering) {
+			params.push(`--${options?.ordering}-order`);
 		}
 
-		if (ref) {
-			params.push(ref);
+		if (options?.ref) {
+			params.push(options?.ref);
 		}
 
 		const data = await this.git<string>(
-			{ cwd: repoPath, configs: ['-c', 'log.showSignature=false'], errors: GitErrorHandling.Ignore },
+			{
+				cancellation: options?.cancellation,
+				cwd: repoPath,
+				configs: ['-c', 'log.showSignature=false'],
+				errors: GitErrorHandling.Ignore,
+			},
 			...params,
 			'--',
 			fileName,
@@ -903,7 +943,14 @@ export class Git {
 		return data.length === 0 ? undefined : data.trim();
 	}
 
-	async log__find_object(repoPath: string, objectId: string, ref: string, ordering: string | null, file?: string) {
+	async log__find_object(
+		repoPath: string,
+		objectId: string,
+		ref: string,
+		ordering: 'date' | 'author-date' | 'topo' | null,
+		file?: string,
+		cancellation?: CancellationToken,
+	) {
 		const params = ['log', '-n1', '--no-renames', '--format=%H', `--find-object=${objectId}`, ref];
 
 		if (ordering) {
@@ -915,13 +962,18 @@ export class Git {
 		}
 
 		const data = await this.git<string>(
-			{ cwd: repoPath, configs: ['-c', 'log.showSignature=false'], errors: GitErrorHandling.Ignore },
+			{
+				cancellation: cancellation,
+				cwd: repoPath,
+				configs: ['-c', 'log.showSignature=false'],
+				errors: GitErrorHandling.Ignore,
+			},
 			...params,
 		);
 		return data.length === 0 ? undefined : data.trim();
 	}
 
-	async log__recent(repoPath: string, ordering?: string | null) {
+	async log__recent(repoPath: string, ordering?: 'date' | 'author-date' | 'topo' | null) {
 		const params = ['log', '-n1', '--format=%H'];
 
 		if (ordering) {
@@ -937,7 +989,7 @@ export class Git {
 		return data.length === 0 ? undefined : data.trim();
 	}
 
-	async log__recent_committerdate(repoPath: string, ordering?: string | null) {
+	async log__recent_committerdate(repoPath: string, ordering?: 'date' | 'author-date' | 'topo' | null) {
 		const params = ['log', '-n1', '--format=%ct'];
 
 		if (ordering) {
@@ -961,7 +1013,7 @@ export class Git {
 			ordering,
 			skip,
 			useShow,
-		}: { limit?: number; ordering?: string | null; skip?: number; useShow?: boolean } = {},
+		}: { limit?: number; ordering?: 'date' | 'author-date' | 'topo' | null; skip?: number; useShow?: boolean } = {},
 	) {
 		const params = [
 			useShow ? 'show' : 'log',
@@ -1062,7 +1114,13 @@ export class Git {
 			limit,
 			ordering,
 			skip,
-		}: { all?: boolean; branch?: string; limit?: number; ordering?: string | null; skip?: number } = {},
+		}: {
+			all?: boolean;
+			branch?: string;
+			limit?: number;
+			ordering?: 'date' | 'author-date' | 'topo' | null;
+			skip?: number;
+		} = {},
 	): Promise<string> {
 		const params = ['log', '--walk-reflogs', `--format=${GitReflogParser.defaultFormat}`, '--date=iso8601'];
 
@@ -1152,9 +1210,14 @@ export class Git {
 		return result;
 	}
 
+	async rev_parse(repoPath: string, ref: string): Promise<string | undefined> {
+		const data = await this.git<string>({ cwd: repoPath, errors: GitErrorHandling.Ignore }, 'rev-parse', ref);
+		return data.length === 0 ? undefined : data.trim();
+	}
+
 	async rev_parse__currentBranch(
 		repoPath: string,
-		ordering: string | null,
+		ordering: 'date' | 'author-date' | 'topo' | null,
 	): Promise<[string, string | undefined] | undefined> {
 		try {
 			const data = await this.git<string>(
@@ -1353,7 +1416,7 @@ export class Git {
 	}
 
 	show__name_status(repoPath: string, fileName: string, ref: string) {
-		return this.git<string>({ cwd: repoPath }, 'show', '--name-status', '--format=', ref, '--', fileName);
+		return this.git<string>({ cwd: repoPath }, 'show', '--name-status', '--format=', '-z', ref, '--', fileName);
 	}
 
 	show_ref__tags(repoPath: string) {
@@ -1386,18 +1449,18 @@ export class Git {
 
 	stash__list(
 		repoPath: string,
-		{
-			format = GitStashParser.defaultFormat,
-			similarityThreshold,
-		}: { format?: string; similarityThreshold?: number | null } = {},
+		{ args, similarityThreshold }: { args?: string[]; similarityThreshold?: number | null },
 	) {
+		if (args == null) {
+			args = ['--name-status'];
+		}
+
 		return this.git<string>(
 			{ cwd: repoPath },
 			'stash',
 			'list',
-			'--name-status',
+			...args,
 			`-M${similarityThreshold == null ? '' : `${similarityThreshold}%`}`,
-			`--format=${format}`,
 		);
 	}
 

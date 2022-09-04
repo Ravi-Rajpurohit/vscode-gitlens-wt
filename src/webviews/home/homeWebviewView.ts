@@ -1,17 +1,18 @@
-import { commands, Disposable, window } from 'vscode';
+import type { Disposable } from 'vscode';
+import { window } from 'vscode';
 import { CoreCommands } from '../../constants';
 import type { Container } from '../../container';
 import type { SubscriptionChangeEvent } from '../../plus/subscription/subscriptionService';
 import { ensurePlusFeaturesEnabled } from '../../plus/subscription/utils';
-import { StorageKeys, SyncedStorageKeys } from '../../storage';
 import type { Subscription } from '../../subscription';
-import { executeCoreCommand } from '../../system/command';
+import { executeCoreCommand, registerCommand } from '../../system/command';
 import { WebviewViewBase } from '../webviewViewBase';
-import { CompletedActions, DidChangeSubscriptionNotificationType, State } from './protocol';
+import type { State } from './protocol';
+import { CompletedActions, DidChangeSubscriptionNotificationType } from './protocol';
 
 export class HomeWebviewView extends WebviewViewBase<State> {
 	constructor(container: Container) {
-		super(container, 'gitlens.views.home', 'home.html', 'Home');
+		super(container, 'gitlens.views.home', 'home.html', 'Home', 'homeView');
 
 		this.disposables.push(this.container.subscription.onDidChange(this.onSubscriptionChanged, this));
 	}
@@ -28,36 +29,33 @@ export class HomeWebviewView extends WebviewViewBase<State> {
 	protected override onVisibilityChanged(visible: boolean): void {
 		if (!visible) return;
 
-		void this.validateSubscription();
+		queueMicrotask(() => void this.validateSubscription());
 	}
 
 	protected override onWindowFocusChanged(focused: boolean): void {
 		if (!focused) return;
 
-		void this.validateSubscription();
+		queueMicrotask(() => void this.validateSubscription());
 	}
 
 	protected override registerCommands(): Disposable[] {
 		return [
-			commands.registerCommand(`${this.id}.refresh`, () => this.refresh(), this),
-			commands.registerCommand('gitlens.home.toggleWelcome', async () => {
+			registerCommand(`${this.id}.refresh`, () => this.refresh(), this),
+			registerCommand('gitlens.home.toggleWelcome', async () => {
 				const welcomeVisible = !this.welcomeVisible;
-				await this.container.storage.store(SyncedStorageKeys.HomeViewWelcomeVisible, welcomeVisible);
+				await this.container.storage.store('views:welcome:visible', welcomeVisible);
 				if (welcomeVisible) {
-					await this.container.storage.store(StorageKeys.HomeViewActionsCompleted, []);
+					await this.container.storage.store('home:actions:completed', []);
 				}
 
 				void this.notifyDidChangeData();
 			}),
 
-			commands.registerCommand('gitlens.home.showSCM', async () => {
-				const completedActions = this.container.storage.get<CompletedActions[]>(
-					StorageKeys.HomeViewActionsCompleted,
-					[],
-				);
+			registerCommand('gitlens.home.showSCM', async () => {
+				const completedActions = this.container.storage.get('home:actions:completed', []);
 				if (!completedActions.includes(CompletedActions.OpenedSCM)) {
 					completedActions.push(CompletedActions.OpenedSCM);
-					await this.container.storage.store(StorageKeys.HomeViewActionsCompleted, completedActions);
+					await this.container.storage.store('home:actions:completed', completedActions);
 
 					void this.notifyDidChangeData();
 				}
@@ -72,14 +70,12 @@ export class HomeWebviewView extends WebviewViewBase<State> {
 	}
 
 	private get welcomeVisible(): boolean {
-		return this.container.storage.get(SyncedStorageKeys.HomeViewWelcomeVisible, true);
+		return this.container.storage.get('views:welcome:visible', true);
 	}
 
 	private async getState(subscription?: Subscription): Promise<State> {
 		// Make sure to make a copy of the array otherwise it will be live to the storage value
-		const completedActions = [
-			...this.container.storage.get<CompletedActions[]>(StorageKeys.HomeViewActionsCompleted, []),
-		];
+		const completedActions = [...this.container.storage.get('home:actions:completed', [])];
 		if (!this.welcomeVisible) {
 			completedActions.push(CompletedActions.DismissedWelcome);
 		}
@@ -103,7 +99,7 @@ export class HomeWebviewView extends WebviewViewBase<State> {
 		if (this._validating == null) {
 			this._validating = this.container.subscription.validate();
 			try {
-				void (await this._validating);
+				await this._validating;
 			} finally {
 				this._validating = undefined;
 			}

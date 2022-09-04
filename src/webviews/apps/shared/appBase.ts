@@ -1,14 +1,8 @@
 /*global window document*/
-import {
-	IpcCommandType,
-	IpcMessage,
-	IpcMessageParams,
-	IpcNotificationType,
-	onIpc,
-	WebviewReadyCommandType,
-} from '../../protocol';
+import type { IpcCommandType, IpcMessage, IpcMessageParams, IpcNotificationType } from '../../protocol';
+import { onIpc, WebviewReadyCommandType } from '../../protocol';
 import { DOM } from './dom';
-import { Disposable } from './events';
+import type { Disposable } from './events';
 import { initializeAndWatchThemeColors } from './theme';
 
 interface VsCodeApi {
@@ -32,7 +26,7 @@ function nextIpcId() {
 	return `webview:${ipcSequence}`;
 }
 
-export abstract class App<State = void> {
+export abstract class App<State = undefined> {
 	private readonly _api: VsCodeApi;
 	protected state: State;
 
@@ -44,7 +38,7 @@ export abstract class App<State = void> {
 		// this.log(`${this.appName}(${this.state ? JSON.stringify(this.state) : ''})`);
 
 		this._api = acquireVsCodeApi();
-		initializeAndWatchThemeColors();
+		initializeAndWatchThemeColors(this.onThemeUpdated?.bind(this));
 
 		requestAnimationFrame(() => {
 			this.log(`${this.appName}.initializing`);
@@ -72,6 +66,7 @@ export abstract class App<State = void> {
 	protected onBind?(): Disposable[];
 	protected onInitialized?(): void;
 	protected onMessageReceived?(e: MessageEvent): void;
+	protected onThemeUpdated?(): void;
 
 	private bindDisposables: Disposable[] | undefined;
 	protected bind() {
@@ -79,8 +74,8 @@ export abstract class App<State = void> {
 		this.bindDisposables = this.onBind?.();
 	}
 
-	protected log(message: string) {
-		console.log(message);
+	protected log(message: string, ...optionalParams: any[]) {
+		console.log(message, ...optionalParams);
 	}
 
 	protected getState(): State {

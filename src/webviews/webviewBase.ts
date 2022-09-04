@@ -1,27 +1,15 @@
-import {
-	commands,
-	Disposable,
-	Uri,
-	ViewColumn,
-	Webview,
-	WebviewPanel,
-	WebviewPanelOnDidChangeViewStateEvent,
-	window,
-	workspace,
-} from 'vscode';
+import type { Webview, WebviewPanel, WebviewPanelOnDidChangeViewStateEvent } from 'vscode';
+import { Disposable, Uri, ViewColumn, window, workspace } from 'vscode';
 import { getNonce } from '@env/crypto';
-import { Commands } from '../constants';
+import type { Commands } from '../constants';
 import type { Container } from '../container';
 import { Logger } from '../logger';
-import { executeCommand } from '../system/command';
-import {
-	ExecuteCommandType,
-	IpcMessage,
-	IpcMessageParams,
-	IpcNotificationType,
-	onIpc,
-	WebviewReadyCommandType,
-} from './protocol';
+import { executeCommand, registerCommand } from '../system/command';
+import { debug, log, logName } from '../system/decorators/log';
+import { serialize } from '../system/decorators/serialize';
+import type { TrackedUsageFeatures } from '../usageTracker';
+import type { IpcMessage, IpcMessageParams, IpcNotificationType } from './protocol';
+import { ExecuteCommandType, onIpc, WebviewReadyCommandType } from './protocol';
 
 const maxSmallIntegerV8 = 2 ** 30; // Max number that can be stored in V8's smis (small integers)
 
@@ -36,11 +24,12 @@ function nextIpcId() {
 	return `host:${ipcSequence}`;
 }
 
+@logName<WebviewBase<any>>((c, name) => `${name}(${c.id})`)
 export abstract class WebviewBase<State> implements Disposable {
 	protected readonly disposables: Disposable[] = [];
 	protected isReady: boolean = false;
 	private _disposablePanel: Disposable | undefined;
-	private _panel: WebviewPanel | undefined;
+	protected _panel: WebviewPanel | undefined;
 
 	constructor(
 		protected readonly container: Container,
@@ -48,15 +37,21 @@ export abstract class WebviewBase<State> implements Disposable {
 		private readonly fileName: string,
 		private readonly iconPath: string,
 		title: string,
+		private readonly trackingFeature: TrackedUsageFeatures,
 		showCommand: Commands,
 	) {
-		this._title = title;
-		this.disposables.push(commands.registerCommand(showCommand, this.onShowCommand, this));
+		this._originalTitle = this._title = title;
+		this.disposables.push(registerCommand(showCommand, this.onShowCommand, this));
 	}
 
 	dispose() {
-		this.disposables.forEach(d => d.dispose());
+		this.disposables.forEach(d => void d.dispose());
 		this._disposablePanel?.dispose();
+	}
+
+	private _originalTitle: string | undefined;
+	get originalTitle(): string | undefined {
+		return this._originalTitle;
 	}
 
 	private _title: string;
@@ -74,11 +69,20 @@ export abstract class WebviewBase<State> implements Disposable {
 		return this._panel?.visible ?? false;
 	}
 
+	@log()
 	hide() {
 		this._panel?.dispose();
 	}
 
-	async show(column: ViewColumn = ViewColumn.Beside): Promise<void> {
+	@log({ args: false })
+	async show(column: ViewColumn = ViewColumn.Beside, ..._args: unknown[]): Promise<void> {
+		void this.container.usage.track(`${this.trackingFeature}:shown`);
+
+		// Only try to open beside if there is an active tab
+		if (column === ViewColumn.Beside && window.tabGroups.activeTabGroup.activeTab == null) {
+			column = ViewColumn.Active;
+		}
+
 		if (this._panel == null) {
 			this._panel = window.createWebviewPanel(
 				this.id,
@@ -104,14 +108,14 @@ export abstract class WebviewBase<State> implements Disposable {
 
 			this._panel.webview.html = await this.getHtml(this._panel.webview);
 		} else {
-			const html = await this.getHtml(this._panel.webview);
-
-			// Reset the html to get the webview to reload
-			this._panel.webview.html = '';
-			this._panel.webview.html = html;
-
+			await this.refresh(true);
 			this._panel.reveal(this._panel.viewColumn ?? ViewColumn.Active, false);
 		}
+	}
+
+	private readonly _cspNonce = getNonce();
+	protected get cspNonce(): string {
+		return this._cspNonce;
 	}
 
 	protected onInitializing?(): Disposable[] | undefined;
@@ -127,10 +131,16 @@ export abstract class WebviewBase<State> implements Disposable {
 	protected includeBody?(): string | Promise<string>;
 	protected includeEndOfBody?(): string | Promise<string>;
 
-	protected async refresh(): Promise<void> {
+	@debug()
+	protected async refresh(force?: boolean): Promise<void> {
 		if (this._panel == null) return;
 
-		this._panel.webview.html = await this.getHtml(this._panel.webview);
+		const html = await this.getHtml(this._panel.webview);
+		if (force) {
+			// Reset the html to get the webview to reload
+			this._panel.webview.html = '';
+		}
+		this._panel.webview.html = html;
 	}
 
 	private onPanelDisposed() {
@@ -142,8 +152,8 @@ export abstract class WebviewBase<State> implements Disposable {
 		this._panel = undefined;
 	}
 
-	protected onShowCommand(): void {
-		void this.show();
+	protected onShowCommand(...args: unknown[]): void {
+		void this.show(undefined, ...args);
 	}
 
 	protected onViewStateChanged(e: WebviewPanelOnDidChangeViewStateEvent): void {
@@ -155,10 +165,11 @@ export abstract class WebviewBase<State> implements Disposable {
 		this.onFocusChanged?.(e.webviewPanel.active);
 	}
 
+	@debug<WebviewBase<State>['onMessageReceivedCore']>({
+		args: { 0: e => (e != null ? `${e.id}: method=${e.method}` : '<undefined>') },
+	})
 	protected onMessageReceivedCore(e: IpcMessage) {
 		if (e == null) return;
-
-		Logger.debug(`Webview(${this.id}).onMessageReceived: method=${e.method}`);
 
 		switch (e.method) {
 			case WebviewReadyCommandType.method:
@@ -198,34 +209,32 @@ export abstract class WebviewBase<State> implements Disposable {
 		]);
 
 		const cspSource = webview.cspSource;
-		const cspNonce = getNonce();
 
 		const root = webview.asWebviewUri(this.container.context.extensionUri).toString();
 		const webRoot = webview.asWebviewUri(webRootUri).toString();
 
-		const html = content
-			.replace(/#{(head|body|endOfBody)}/i, (_substring, token) => {
+		const html = content.replace(
+			/#{(head|body|endOfBody|placement|cspSource|cspNonce|root|webroot)}/g,
+			(_substring, token) => {
 				switch (token) {
 					case 'head':
 						return head ?? '';
 					case 'body':
 						return body ?? '';
 					case 'endOfBody':
-						return bootstrap != null
-							? `<script type="text/javascript" nonce="#{cspNonce}">window.bootstrap = ${JSON.stringify(
-									bootstrap,
-							  )};</script>${endOfBody ?? ''}`
-							: endOfBody ?? '';
-					default:
-						return '';
-				}
-			})
-			.replace(/#{(cspSource|cspNonce|root|webroot)}/g, (substring, token) => {
-				switch (token) {
+						return `${
+							bootstrap != null
+								? `<script type="text/javascript" nonce="${
+										this.cspNonce
+								  }">window.bootstrap=${JSON.stringify(bootstrap)};</script>`
+								: ''
+						}${endOfBody ?? ''}`;
+					case 'placement':
+						return 'editor';
 					case 'cspSource':
 						return cspSource;
 					case 'cspNonce':
-						return cspNonce;
+						return this.cspNonce;
 					case 'root':
 						return root;
 					case 'webroot':
@@ -233,7 +242,8 @@ export abstract class WebviewBase<State> implements Disposable {
 					default:
 						return '';
 				}
-			});
+			},
+		);
 
 		return html;
 	}
@@ -242,10 +252,15 @@ export abstract class WebviewBase<State> implements Disposable {
 		return this.postMessage({ id: nextIpcId(), method: type.method, params: params });
 	}
 
-	private postMessage(message: IpcMessage) {
+	@serialize()
+	@debug<WebviewBase<State>['postMessage']>({ args: { 0: m => `(id=${m.id}, method=${m.method})` } })
+	private postMessage(message: IpcMessage): Promise<boolean> {
 		if (this._panel == null) return Promise.resolve(false);
 
-		Logger.debug(`Webview(${this.id}).postMessage: method=${message.method}`);
-		return this._panel.webview.postMessage(message);
+		// It looks like there is a bug where `postMessage` can sometimes just hang infinitely. Not sure why, but ensure we don't hang
+		return Promise.race<boolean>([
+			this._panel.webview.postMessage(message),
+			new Promise<boolean>(resolve => setTimeout(() => resolve(false), 5000)),
+		]);
 	}
 }

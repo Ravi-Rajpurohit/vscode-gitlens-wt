@@ -109,7 +109,7 @@ export function escapeMarkdown(s: string, options: { quoted?: boolean } = {}): s
 	if (!options.quoted) return s;
 
 	// Keep under the same block-quote but with line breaks
-	return s.replace(markdownQuotedRegex, '\t\n>  ');
+	return s.replace(markdownQuotedRegex, '\t\\\n>  ');
 }
 
 export function escapeRegex(s: string) {
@@ -210,7 +210,7 @@ export function interpolate(template: string, context: object | undefined): stri
 		interpolationMap.set(template, fn);
 	}
 
-	return fn.call(context);
+	return fn.call(context) as string;
 }
 
 // eslint-disable-next-line prefer-arrow-callback
@@ -235,7 +235,7 @@ export async function interpolateAsync(template: string, context: object | undef
 	}
 
 	const value = await fn.call(context);
-	return value;
+	return value as string;
 }
 
 export function isLowerAsciiLetter(code: number): boolean {
@@ -404,6 +404,8 @@ export function getWidth(s: string): number {
 		cachedAnsiRegex = ansiRegex();
 	}
 	s = s.replace(cachedAnsiRegex, '');
+
+	if (s.length === 0) return 0;
 
 	let count = 0;
 	let emoji = 0;

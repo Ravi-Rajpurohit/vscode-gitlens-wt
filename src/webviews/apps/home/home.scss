@@ -8,7 +8,7 @@ html {
 }
 
 body {
-	background-color: var(--color-background);
+	background-color: var(--color-view-background);
 	color: var(--color-view-foreground);
 	font-family: var(--font-family);
 	height: 100%;
@@ -28,6 +28,13 @@ body {
 	display: grid;
 	// repeat needs to match the number of slots
 	grid-template-rows: repeat(var(--slots), min-content);
+}
+
+.notice {
+    font-size: 1.1rem;
+    border-bottom: 1px solid var(--divider-background);
+    padding-bottom: 1rem;
+    text-align: center;
 }
 
 section {

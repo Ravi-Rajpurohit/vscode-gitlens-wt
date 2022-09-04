@@ -1,4 +1,4 @@
-import { Uri } from 'vscode';
+import type { Uri } from 'vscode';
 import type {
 	Action,
 	ActionContext,
@@ -15,18 +15,25 @@ import {
 	ShowQuickCommitFileCommand,
 } from '../../commands';
 import { Command } from '../../commands/base';
-import { DateStyle, FileAnnotationType } from '../../configuration';
+import { configuration, DateStyle, FileAnnotationType } from '../../configuration';
 import { Commands, GlyphChars } from '../../constants';
 import { Container } from '../../container';
 import { emojify } from '../../emojis';
 import { join, map } from '../../system/iterable';
 import { PromiseCancelledError } from '../../system/promise';
-import { escapeMarkdown, getSuperscript, TokenOptions } from '../../system/string';
-import { ContactPresence } from '../../vsls/vsls';
-import { PreviousLineComparisonUrisResult } from '../gitProvider';
-import { GitCommit, GitRemote, GitRevision, IssueOrPullRequest, PullRequest } from '../models';
-import { RemoteProvider } from '../remotes/provider';
-import { FormatOptions, Formatter } from './formatter';
+import type { TokenOptions } from '../../system/string';
+import { escapeMarkdown, getSuperscript } from '../../system/string';
+import type { ContactPresence } from '../../vsls/vsls';
+import type { PreviousLineComparisonUrisResult } from '../gitProvider';
+import type { GitCommit } from '../models/commit';
+import { isCommit } from '../models/commit';
+import type { IssueOrPullRequest } from '../models/issue';
+import { PullRequest } from '../models/pullRequest';
+import { GitRevision } from '../models/reference';
+import { GitRemote } from '../models/remote';
+import type { RemoteProvider } from '../remotes/remoteProvider';
+import type { FormatOptions } from './formatter';
+import { Formatter } from './formatter';
 
 export interface CommitFormatOptions extends FormatOptions {
 	autolinkedIssuesOrPullRequests?: Map<string, IssueOrPullRequest | PromiseCancelledError | undefined>;
@@ -77,6 +84,9 @@ export interface CommitFormatOptions extends FormatOptions {
 		pullRequestDate?: TokenOptions;
 		pullRequestState?: TokenOptions;
 		sha?: TokenOptions;
+		stashName?: TokenOptions;
+		stashNumber?: TokenOptions;
+		stashOnRef?: TokenOptions;
 		tips?: TokenOptions;
 	};
 }
@@ -134,7 +144,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 	private get _pullRequestDateOrAgo() {
 		const dateStyle =
-			this._options.dateStyle != null ? this._options.dateStyle : Container.instance.config.defaultDateStyle;
+			this._options.dateStyle != null ? this._options.dateStyle : configuration.get('defaultDateStyle');
 		return dateStyle === DateStyle.Absolute ? this._pullRequestDate : this._pullRequestDateAgo;
 	}
 
@@ -144,7 +154,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 	get agoOrDate(): string {
 		const dateStyle =
-			this._options.dateStyle != null ? this._options.dateStyle : Container.instance.config.defaultDateStyle;
+			this._options.dateStyle != null ? this._options.dateStyle : configuration.get('defaultDateStyle');
 		return this._padOrTruncate(
 			dateStyle === DateStyle.Absolute ? this._date : this._dateAgo,
 			this._options.tokenOptions.agoOrDate,
@@ -153,7 +163,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 	get agoOrDateShort(): string {
 		const dateStyle =
-			this._options.dateStyle != null ? this._options.dateStyle : Container.instance.config.defaultDateStyle;
+			this._options.dateStyle != null ? this._options.dateStyle : configuration.get('defaultDateStyle');
 		return this._padOrTruncate(
 			dateStyle === DateStyle.Absolute ? this._date : this._dateAgoShort,
 			this._options.tokenOptions.agoOrDateShort,
@@ -174,7 +184,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 	get authorAgoOrDate(): string {
 		const dateStyle =
-			this._options.dateStyle != null ? this._options.dateStyle : Container.instance.config.defaultDateStyle;
+			this._options.dateStyle != null ? this._options.dateStyle : configuration.get('defaultDateStyle');
 		return this._padOrTruncate(
 			dateStyle === DateStyle.Absolute ? this._authorDate : this._authorDateAgo,
 			this._options.tokenOptions.authorAgoOrDate,
@@ -183,7 +193,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 	get authorAgoOrDateShort(): string {
 		const dateStyle =
-			this._options.dateStyle != null ? this._options.dateStyle : Container.instance.config.defaultDateStyle;
+			this._options.dateStyle != null ? this._options.dateStyle : configuration.get('defaultDateStyle');
 		return this._padOrTruncate(
 			dateStyle === DateStyle.Absolute ? this._authorDate : this._authorDateAgoShort,
 			this._options.tokenOptions.authorAgoOrDateShort,
@@ -205,7 +215,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 	}
 
 	get avatar(): string | Promise<string> {
-		if (!this._options.markdown || !Container.instance.config.hovers.avatars) {
+		if (!this._options.markdown || !configuration.get('hovers.avatars')) {
 			return this._padOrTruncate('', this._options.tokenOptions.avatar);
 		}
 
@@ -230,9 +240,9 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 	}
 
 	private async _getAvatarMarkdown(title: string, size?: number) {
-		size = size ?? Container.instance.config.hovers.avatarSize;
+		size = size ?? configuration.get('hovers.avatarSize');
 		const avatarPromise = this._item.getAvatarUri({
-			defaultStyle: Container.instance.config.defaultGravatarsStyle,
+			defaultStyle: configuration.get('defaultGravatarsStyle'),
 			size: size,
 		});
 		return this._padOrTruncate(
@@ -247,21 +257,21 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 	get changes(): string {
 		return this._padOrTruncate(
-			GitCommit.is(this._item) ? this._item.formatStats() : '',
+			isCommit(this._item) ? this._item.formatStats() : '',
 			this._options.tokenOptions.changes,
 		);
 	}
 
 	get changesDetail(): string {
 		return this._padOrTruncate(
-			GitCommit.is(this._item) ? this._item.formatStats({ expand: true, separator: ', ' }) : '',
+			isCommit(this._item) ? this._item.formatStats({ expand: true, separator: ', ' }) : '',
 			this._options.tokenOptions.changesDetail,
 		);
 	}
 
 	get changesShort(): string {
 		return this._padOrTruncate(
-			GitCommit.is(this._item) ? this._item.formatStats({ compact: true, separator: '' }) : '',
+			isCommit(this._item) ? this._item.formatStats({ compact: true, separator: '' }) : '',
 			this._options.tokenOptions.changesShort,
 		);
 	}
@@ -360,7 +370,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 				}, ${pr.formatDateFromNow()}")`;
 			} else if (pr instanceof PromiseCancelledError) {
 				commands += `${separator}[$(git-pull-request) PR $(loading~spin)](command:${Commands.RefreshHover} "Searching for a Pull Request (if any) that introduced this commit...")`;
-			} else if (pr.provider != null && Container.instance.config.integrations.enabled) {
+			} else if (pr.provider != null && configuration.get('integrations.enabled')) {
 				commands += `${separator}[$(plug) Connect to ${pr.provider.name}${
 					GlyphChars.Ellipsis
 				}](${ConnectRemoteProviderCommand.getMarkdownCommandArgs(pr)} "Connect to ${
@@ -412,7 +422,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 	get committerAgoOrDate(): string {
 		const dateStyle =
-			this._options.dateStyle != null ? this._options.dateStyle : Container.instance.config.defaultDateStyle;
+			this._options.dateStyle != null ? this._options.dateStyle : configuration.get('defaultDateStyle');
 		return this._padOrTruncate(
 			dateStyle === DateStyle.Absolute ? this._committerDate : this._committerDateAgo,
 			this._options.tokenOptions.committerAgoOrDate,
@@ -421,7 +431,7 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 	get committerAgoOrDateShort(): string {
 		const dateStyle =
-			this._options.dateStyle != null ? this._options.dateStyle : Container.instance.config.defaultDateStyle;
+			this._options.dateStyle != null ? this._options.dateStyle : configuration.get('defaultDateStyle');
 		return this._padOrTruncate(
 			dateStyle === DateStyle.Absolute ? this._committerDate : this._committerDateAgoShort,
 			this._options.tokenOptions.committerAgoOrDateShort,
@@ -496,6 +506,10 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 		message = emojify(message);
 		message = this._padOrTruncate(message, this._options.tokenOptions.message);
+
+		if (this._options.markdown) {
+			message = message.replace(/</, '&lt;').replace(/>/, '&gt;');
+		}
 
 		if (this._options.messageAutolinks) {
 			message = Container.instance.autolinks.linkify(
@@ -588,6 +602,18 @@ export class CommitFormatter extends Formatter<GitCommit, CommitFormatOptions> {
 
 	get sha(): string {
 		return this._padOrTruncate(this._item.shortSha ?? '', this._options.tokenOptions.sha);
+	}
+
+	get stashName(): string {
+		return this._padOrTruncate(this._item.stashName ?? '', this._options.tokenOptions.stashName);
+	}
+
+	get stashNumber(): string {
+		return this._padOrTruncate(this._item.number ?? '', this._options.tokenOptions.stashNumber);
+	}
+
+	get stashOnRef(): string {
+		return this._padOrTruncate(this._item.stashOnRef ?? '', this._options.tokenOptions.stashOnRef);
 	}
 
 	get tips(): string {
